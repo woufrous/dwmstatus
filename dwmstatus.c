@@ -12,7 +12,10 @@
 
 #include <X11/Xlib.h>
 
+#include <mpd/client.h>
+
 static Display *dpy;
+static struct mpd_connection* mpdconn = NULL;
 
 char *
 smprintf(char *fmt, ...)
@@ -75,42 +78,76 @@ setstatus(char *str)
 	XSync(dpy, False);
 }
 
-char *
-loadavg(void)
+char*
+getMPDState()
 {
-	double avgs[3];
+	struct mpd_status* stat = NULL;
+	struct mpd_song* song = NULL;
+	const char* title = NULL;
+	const char* artist = NULL;
+	char* ret = NULL;
 
-	if (getloadavg(avgs, 3) < 0) {
-		perror("getloadavg");
-		exit(1);
+	if(!mpdconn)
+		return smprintf("");
+
+	mpd_command_list_begin(mpdconn, true);
+	mpd_send_status(mpdconn);
+	mpd_send_current_song(mpdconn);
+	mpd_command_list_end(mpdconn);
+
+	stat = mpd_recv_status(mpdconn);
+	if(stat && (mpd_status_get_state(stat) == MPD_STATE_PLAY)) {
+		//display info
+		mpd_response_next(mpdconn);
+		song = mpd_recv_song(mpdconn);
+		artist = smprintf("%s", mpd_song_get_tag(song, MPD_TAG_ARTIST, 0));
+		title = smprintf("%s", mpd_song_get_tag(song, MPD_TAG_TITLE, 0));
+		ret = smprintf("%s - %s |", artist, title);
+		// cleanup
+		mpd_song_free(song);
+		free((char*)artist);
+		free((char*)title);
+	} else {
+		//nothing
+		ret = smprintf("");;
 	}
+	mpd_status_free(stat);
+	mpd_response_finish(mpdconn);
 
-	return smprintf("%.2f %.2f %.2f", avgs[0], avgs[1], avgs[2]);
+	return ret;
 }
 
 int
 main(void)
 {
-	char *status;
-//	char *avgs;
-	char *tmlcl;
+	char* status = NULL;
+	char* tmlcl = NULL;
+	char* mpdstr = NULL;
 
 	if (!(dpy = XOpenDisplay(NULL))) {
 		fprintf(stderr, "dwmstatus: cannot open display.\n");
 		return 1;
 	}
 
-	for (;;sleep(90)) {
-//		avgs = loadavg();
-		tmlcl = mktimes("%a, %d. %b, %H:%M", "Europe/Berlin");
+	// open MPD connection
+	mpdconn = mpd_connection_new("localhost", 0, 0);
+	if(!mpdconn || mpd_connection_get_error(mpdconn)) {
+		fprintf(stderr, "dwmstatus: %s\n", mpd_connection_get_error_message(mpdconn));
+		return 1;
+	}
 
-		status = smprintf("%s", tmlcl);
+	for (;;sleep(1)) {
+		tmlcl = mktimes("%a, %d. %b, %H:%M", "Europe/Berlin");
+		mpdstr = getMPDState();
+		status = smprintf(" %s %s ", mpdstr, tmlcl);
+
 		setstatus(status);
-//		free(avgs);
 		free(tmlcl);
+		free(mpdstr);
 		free(status);
 	}
 
+	mpd_connection_free(mpdconn);
 	XCloseDisplay(dpy);
 
 	return 0;
