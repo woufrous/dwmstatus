@@ -133,7 +133,6 @@ main(void)
 	mpdconn = mpd_connection_new("localhost", 0, 0);
 	if(!mpdconn || mpd_connection_get_error(mpdconn)) {
 		fprintf(stderr, "dwmstatus: %s\n", mpd_connection_get_error_message(mpdconn));
-		return 1;
 	}
 
 	for (;;sleep(1)) {
