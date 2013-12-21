@@ -12,10 +12,14 @@
 
 #include <X11/Xlib.h>
 
+#ifdef MPD
 #include <mpd/client.h>
+#endif /* MPD */
 
 static Display *dpy;
+#ifdef MPD
 static struct mpd_connection* mpdconn = NULL;
+#endif /* MPD */
 
 char *
 smprintf(char *fmt, ...)
@@ -78,6 +82,7 @@ setstatus(char *str)
 	XSync(dpy, False);
 }
 
+#ifdef MPD
 char*
 getMPDState()
 {
@@ -116,37 +121,50 @@ getMPDState()
 
 	return ret;
 }
+#endif /* MPD */
 
 int
 main(void)
 {
 	char* status = NULL;
 	char* tmlcl = NULL;
+#ifdef MPD
 	char* mpdstr = NULL;
+#endif /* MPD */
 
 	if (!(dpy = XOpenDisplay(NULL))) {
 		fprintf(stderr, "dwmstatus: cannot open display.\n");
 		return 1;
 	}
 
+#ifdef MPD
 	// open MPD connection
 	mpdconn = mpd_connection_new("localhost", 0, 0);
 	if(!mpdconn || mpd_connection_get_error(mpdconn)) {
 		fprintf(stderr, "dwmstatus: %s\n", mpd_connection_get_error_message(mpdconn));
 	}
+#endif /* MPD */
 
 	for (;;sleep(1)) {
 		tmlcl = mktimes("%a, %d. %b, %H:%M", "Europe/Berlin");
+#ifdef MPD
 		mpdstr = getMPDState();
 		status = smprintf(" %s %s ", mpdstr, tmlcl);
+#else
+		status = smprintf(" %s ", tmlcl);
+#endif /* MPD */
 
 		setstatus(status);
 		free(tmlcl);
+#ifdef MPD
 		free(mpdstr);
+#endif /* MPD */
 		free(status);
 	}
 
+#ifdef MPD
 	mpd_connection_free(mpdconn);
+#endif /* MPD */
 	XCloseDisplay(dpy);
 
 	return 0;
